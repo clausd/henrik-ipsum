@@ -26,16 +26,19 @@ class Node < SimpleDelegator
   end
   
   def pick
-    n = rand*count
+    n = (rand*count).floor
+    p n
     i = 0
+    retval = nil
     self.children.each_value do |child|
+      retval = child
       if i >= n
-        return child
+        return retval
       else
         i += child.count
       end
     end
-    return nil
+    return retval
   end
   
 end
@@ -146,6 +149,7 @@ class Ipsum
   end
   
 end
+
 # 
 # get '/' do
 #   @gibberish = Nordem.gibberish(100)
