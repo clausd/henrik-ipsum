@@ -5,7 +5,7 @@ require 'delegate'
 
 # we're relying on simplistic ruby 1.8.7 handling of utf-8
 class Node < SimpleDelegator
-  attr_accessor :key, :count, :children
+  attr_accessor :key, :count, :children, :model
   
   def initialize(thekey)
     self.key = thekey
@@ -27,7 +27,6 @@ class Node < SimpleDelegator
   
   def pick
     n = (rand*count).floor
-    p n
     i = 0
     retval = nil
     self.children.each_value do |child|
@@ -47,105 +46,97 @@ class Ipsum
   
   def initialize(language = 'da')
     parsing = YAML::load_file("parsing.#{language}.yml")
-    @letter_chars = parsing['letters'].split('')
-    @lower_chars = parsing['letters_lower'].split('')
-    @stop_chars = parsing['sentence_end'].split('')
-    @accept_chars = @letter_chars + @stop_chars + parsing['accept'].split('')
+    @upper_chars = parsing['upper'].split('')
+    @lower_chars = parsing['lower'].split('')
+    @stop_chars = parsing['stop'].split('')
+    @letter_chars = @upper_chars + @lower_chars
+    @accept_chars = @letter_chars + @stop_chars + parsing['accept'].split('') + ["\n", ' ', "\t", '.']
     @model = YAML::load_file("model.#{language}.yml") if File.exist?("model.#{language}.yml")
   end
   
-  # Should do binary search but enough for now....
-  def self.draw_from_weighted_array(a)
-      # p a
-      r = rand
-      if a.length == 0
-        return nil
-      end
-      i = a.length-1
-      while i>0 && a[i][1] > r 
-        i -= 1
-      end
-      return a[i][0]
-  end
-
-  def self.build_weighted_array(occurences)
-    sum = 0.0
-    occurences.each_value {|v| sum += v}
-    ret = []
-    dist = 0
-    occurences.each_pair {|k,v| ret.push([k,dist]); dist += v/sum}
-    return ret
-  end
-
   def accept(c)
     @accept_chars.index(c)
   end
   
   def to_lower(c)
-    @letter_chars.index(c) ? @lower_chars[@letter_chars.index(c)] : c
+    @upper_chars.index(c) ? @lower_chars[@upper_chars.index(c)] : c
+  end
+  
+  def to_upper(c)
+    @lower_chars.index(c) ? @upper_chars[@lower_chars.index(c)] : c
   end
 
+  def letter(c)
+    @letter_chars.index(c)
+  end
+  
   def stop(c)
     return @stop_chars.index(c)
   end
-  
+
   def space(c)
-    return @@whitespace_chars[c]
+    return @accept_chars.index(c) && @letter_chars.index(c).nil? && @stop_chars.index(c).nil?
+  end
+  
+  def capitalize(word)
+    word[0] = to_upper(word[0])
+    word
   end
 
-  def count_string(string)
-    string.unpack('U*').reduce({}) {|occ, c| occ[c] = occ[c].to_i + 1 if accept(c)}
+  def build_model(filename, depth = 5)
+    root = Node.new(nil)
+    chars = []
+    scan_file(filename) do |c|
+      chars << c
+      while (chars.count > depth) do
+        root.append(chars[0..4])
+        chars.shift
+      end
+    end
+    @model = root
   end
 
-  def count_file(filename) 
-    occ = {}
-    last = 0
+  def scan_file(filename, &block) 
     File.open(filename,'r') do |f|
       f.each do |l|
-        l.unpack('U*').each do |c|
-          if accept(c)
-            if space(c) 
-              c = 32
-              if space(last.last)
-                next
-              end
-            end
-            if last != 0
-              occ[last] ||= {}
-              occ[last][c] = occ[last][c].to_i + 1
-            end
-            last = c
-          end
+        scan_string(l, &block)
+      end
+    end
+  end
+
+  def scan_string(string)
+    spaced = true
+    string.split('').each do |c|
+      if accept(c)
+        c = to_lower(c)
+        if space(c) 
+          c = ' '
+        else
+          spaced = false
+        end
+        yield c if !spaced #only one space at a time
+        if c == ' '
+          spaced = true
         end
       end
     end
-    return occ
-  end
- 
-  def self.build_stats(filename)
-    occ = count_file(filename)
-    occ.each_key do |k|
-      occ[k] = build_weighted_array(occ[k])
-    end
-    return occ
+    nil
   end
   
-  def self.gibberish(n)
-    c = draw_from_weighted_array(@@bigrams[46])
-    out = []
-    out.push(c)
+  def gibberish(n)
+    cap = true
+    c = @model.pick
+    out = [to_upper(c.key)]
     while out.length<n
-      while !stop(c)
-        # p c 
-        # p @@bigrams[c]
-        c = draw_from_weighted_array(@@bigrams[c])
-        out.push(c)
-      end
-      # out.push(46)
-      c = draw_from_weighted_array(@@bigrams[46])
-      out.push(c)
+      nk = c.pick
+      c = nk.nil? ? @model.pick : nk
+      c = to_upper(c) if cap
+      out << c.key
+      cap = false if letter(c)
+      cap = true if stop(c)
+      out << ' ' if stop(c)
     end
-    return out.pack('U*')
+    return out.join('')
   end
   
 end
