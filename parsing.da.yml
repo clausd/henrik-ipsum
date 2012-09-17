@@ -1,0 +1,7 @@
+---
+  letters: abcdefghijklmnopqrstuvwxyzæøåABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ
+  letters_lower: abcdefghijklmnopqrstuvwxyzæøåabcdefghijklmnopqrstuvwxyzæøå
+  sentence_end: '.?!'
+  accept:
+  eksempel: Æ æ ue å æ ø i æ å. A æ å ue å æ ø i æ å!
+
